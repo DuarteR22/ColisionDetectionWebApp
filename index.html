@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="pt">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Visualizador de Timestamps de Colisão</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@100..900&display=swap');
+        
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f7f9fb;
+        }
+    </style>
+
+    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+</head>
+<body>
+
+<div id="app" class="p-4 md:p-8 lg:p-12 min-h-screen">
+    <div class="max-w-xl mx-auto bg-white shadow-xl rounded-2xl p-6 md:p-10">
+        
+        <!-- Título e Cabeçalho -->
+        <h1 class="text-3xl font-bold text-gray-800 mb-2">
+            Colisões Registadas
+        </h1>
+        <!-- Apresenta erro  -->
+
+        <div v-if="loading" class="flex items-center justify-center p-12 bg-indigo-50 rounded-xl">
+            <svg class="animate-spin -ml-1 mr-3 h-8 w-8 text-indigo-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+            </svg>
+            <span class="text-lg font-semibold text-indigo-700">A carregar dados...</span>
+        </div>
+
+        <div v-else-if="error" class="bg-red-100 border-l-4 border-red-500 text-red-700 p-4 rounded-lg" role="alert">
+            <p class="font-bold">Erro ao carregar os dados:</p>
+            <p>{{ error }}</p>
+            <p class="text-sm mt-2 font-semibold">
+                Por favor, verifique se a chave API no código (`readApiKey`) corresponde à **Chave de Leitura** mais recente para o Canal {{ channelId }}.
+            </p>
+        </div>
+        <!-- Mensagem de erro até aqui -->
+
+
+
+        <!-- Apresenta conteúdo da tabela caso as entradas encontradas sejam > 0 -->
+
+        <div v-else-if="entries.length > 0" class="overflow-x-auto shadow-lg rounded-lg">
+            <table class="min-w-full divide-y divide-gray-200">
+                <thead class="bg-indigo-600 text-white sticky top-0">
+                    <tr>
+                        <th scope="col" class="px-4 py-3 text-left text-sm font-semibold uppercase tracking-wider">
+                            Data/Hora da Colisão
+                        </th>
+                    </tr>
+                </thead>
+                <tbody class="bg-white divide-y divide-gray-100">
+                    <tr 
+                        v-for="(entry, index) in entries" 
+                        :key="index" 
+                        :class="['hover:bg-indigo-50 transition duration-150', {'bg-gray-50': index % 2 === 0}]"
+                    >
+                        <!-- Valor do Timestamp Formatado -->
+                        <td class="px-4 py-3 whitespace-nowrap text-sm font-medium text-gray-900">
+                            {{ formatTimestamp(entry.created_at) }}
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+            <div class="p-4 text-sm text-gray-500 bg-white border-t border-gray-200">
+                A mostrar os últimos {{ entries.length }} registos de colisão.
+            </div>
+        </div>
+
+        <!-- Mensagem se não houver dados -->
+        <div v-else class="text-center p-12 bg-gray-100 rounded-xl text-gray-500">
+            <p class="text-lg font-medium">Nenhum registo de colisão encontrado nos últimos {{ resultsLimit }} feeds.</p>
+        </div>
+
+    </div>
+</div>
+
+<script type="module">
+    const { createApp, ref, onMounted, computed } = Vue
+
+    createApp({
+        setup() {
+            const channelId = '3179021';             
+            const readApiKey = 'TOOXXX3FKY1D4EVD'; 
+            const resultsLimit = 100; 
+            const fieldNumber = 1; 
+            
+            const apiUrl = `https://api.thingspeak.com/channels/${channelId}/fields/${fieldNumber}.json?api_key=${readApiKey}&results=${resultsLimit}`;
+            const loading = ref(true);
+            const error = ref(null);
+            const entries = ref([]);
+            const channelName = ref('');
+            
+            const fetchData = async () => {
+                loading.value = true;
+                error.value = null;
+                try {
+                    const maxRetries = 3;
+                    let attempt = 0;
+
+                    while (attempt < maxRetries) {
+                        try {
+                            const response = await fetch(apiUrl);
+
+                            if (!response.ok) {
+                                if (response.status === 400) {
+                                     throw new Error(`Código de erro: 400`);
+                                }
+                                throw new Error(`Código de erro: ${response.status}`);
+                            }
+                            
+                            const data = await response.json();
+                            
+                            if (data && data.channel && data.feeds) {
+                                channelName.value = data.channel.name || `Canal ${channelId}`;
+                                entries.value = data.feeds;
+                                return;
+
+                            } else {
+                                throw new Error("Resposta da API inválida.");
+                            }
+                        } catch (e) {
+                            if (attempt < maxRetries - 1) {
+                                const delay = Math.pow(2, attempt) * 1000;
+                                await new Promise(resolve => setTimeout(resolve, delay));
+                            } else {
+                                throw e;
+                            }
+                            attempt++;
+                        }
+                    }
+
+                } catch (e) {
+                    console.error("Erro ao obter dados:", e);
+                    error.value = e.message;
+                } finally {
+                    loading.value = false;
+                }
+            };
+            const formatTimestamp = (timestamp) => {
+                if (!timestamp) return '-';
+                
+                try {
+                    const date = new Date(timestamp);
+                    
+                    const options = { 
+                        year: 'numeric', 
+                        month: 'short', 
+                        day: 'numeric', 
+                        hour: '2-digit', 
+                        minute: '2-digit', 
+                        second: '2-digit', 
+                        hour12: false 
+                    };
+                    
+                    return date.toLocaleString('pt-PT', options);
+                } catch (e) {
+                    console.error("Erro ao formatar timestamp:", e);
+                    return timestamp; 
+                }
+            };
+
+            onMounted(() => {
+                fetchData();
+            });
+
+            return {
+                loading,
+                error,
+                entries,
+                channelName,
+                resultsLimit,
+                formatTimestamp,
+                channelId 
+            }
+        }
+    }).mount('#app');
+</script>
+
+</body>
+</html>
