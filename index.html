@@ -69,20 +69,29 @@
                     A mostrar os {{ entries.length }} registos de colisões.
                 </div>
             </div>
-            <!-- Controlo do Buzzer -->
-            <div class=" items-center justify-between">
+            <!-- HTML dos botões de desligar buzzer e de apagar histórico da base de dados -->
+            <div class="flex flex-col sm:flex-row justify-between space-y-4 sm:space-y-0 sm:space-x-4">
                 <button 
                     @click="desligaBuzzer"
                     :disabled="buzzerLigado"
                     class="w-full sm:w-auto px-6 py-2 bg-red-600 text-white font-semibold rounded-full shadow-lg hover:bg-red-700 transition duration-300 disabled:opacity-50 disabled:cursor-not-allowed">
-                    <span v-if="buzzerLigado">A enviar comando...</span>
+                    <span v-if="buzzerLigado">A enviar comando</span>
                     <span v-else>Desligar Buzzer Remotamente</span>
                 </button>
+                <button 
+                        @click="limparRegistos"
+                        class="px-6 py-2 bg-yellow-600 text-white font-semibold rounded-full shadow-lg hover:bg-yellow-700 transition duration-300 w-full sm:w-1/2">
+                        Apagar o Registo de Colisões
+                    </button>
             </div>
             <!-- Mensagem de estado do buzzer -->
             <div v-if="buzzerMensagemEstado" 
                 :class="['p-3 mt-4 rounded-lg', buzzerMensagemEstado.includes('Erro') ? 'bg-red-100 text-red-800' : 'bg-green-100 text-green-800']">
                 {{ buzzerMensagemEstado }}
+            </div>
+            <div v-if="limpezaMensagemEstado" 
+                :class="['p-3 mt-4 rounded-lg', limpezaMensagemEstado.includes('Erro') ? 'bg-red-100 text-red-800' : 'bg-green-100 text-green-800']">
+                {{ limpezaMensagemEstado }}
             </div>
         </div>
         <!-- Mensagem se não houveem dados -->
@@ -101,7 +110,8 @@
             const VERCEL_API_BASE_URL = 'https://api-tam-six.vercel.app'; 
             const API_READ_URL = `${VERCEL_API_BASE_URL}/colisoes`; 
             const CONTROL_OFF_URL = `${VERCEL_API_BASE_URL}/desliga_buzzer`;
-            
+            const API_CLEAN_URL = `${VERCEL_API_BASE_URL}/apagar_colisoes`; 
+
             let pollingInterval = null; 
             const loading = ref(true);
             const error = ref(null);
@@ -109,6 +119,7 @@
             const channelName = ref('PostgreSQL (tam.colisao)');             
             const buzzerLigado = ref(false); 
             const buzzerMensagemEstado = ref(null);
+            const limpezaMensagemEstado = ref(null);
 
             const desligaBuzzer = async() => {
                 buzzerLigado.value = true;
@@ -130,6 +141,44 @@
                     buzzerMensagemEstado.value = `Erro ao enviar comando para a API: ${e.message}.`;
                 } finally {
                     buzzerLigado.value = false;
+                }
+            };
+            const limparRegistos = async () => {
+                console.log("Pretende mesmo apagar todos os registos de colisões?");
+                
+                limpezaMensagemEstado.value = "A processar limpeza...";
+
+                try {
+                    const response = await fetch(API_CLEAN_URL, {
+                        method: 'POST'
+                    });
+
+                    if (!response.ok) {
+                        let errorDetail = 'Erro desconhecido.';
+                        const contentType = response.headers.get('content-type');
+                        
+                        if (contentType && contentType.includes('application/json')) {
+                            const errorData = await response.json().catch(() => ({error: 'Corpo inválido.'}));
+                            errorDetail = errorData.error || errorDetail;
+                        } else {
+                            errorDetail = 'A API do Vercel devolveu um erro';
+                        }
+                        
+                        throw new Error(`Falha: Código ${response.status} detalhes ${errorDetail}`);
+                    }
+                    
+                    let successMessage = "Colisões apagadas com sucesso!";
+                    try {
+                        const data = await response.json();
+                        successMessage = data.mensagem || successMessage;
+                    } catch (e) {
+                    }                    
+                    limpezaMensagemEstado.value = `Colisões apagadas com sucesso!`;
+                    
+                    await fetchData(); 
+
+                } catch (e) {
+                    limpezaMensagemEstado.value = `Erro ao apagar registos de colisões: ${e.message}.`;
                 }
             };
             const fetchData = async () => {
@@ -184,7 +233,7 @@
             onMounted(() => {
                 const { onUnmounted } = Vue; 
                 fetchData();
-                const pollingInterval = setInterval(fetchData, 5000); 
+                const pollingInterval = setInterval(fetchData, 10000); 
                 onUnmounted(() => {
                     clearInterval(pollingInterval);
                 });
@@ -198,7 +247,9 @@
                 formatTimestamp,
                 buzzerLigado,
                 buzzerMensagemEstado,
-                desligaBuzzer
+                limpezaMensagemEstado, 
+                desligaBuzzer,
+                limparRegistos
             }
         }
     }).mount('#app');
