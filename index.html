@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Visualizador de Timestamps de Colisão</title>
+    <title>Visualizador de Colisões</title>
     <script src="https://cdn.tailwindcss.com"></script>
     
     <style>
@@ -21,10 +21,9 @@
 <div id="app" class="p-4 md:p-8 lg:p-12 min-h-screen">
     <div class="max-w-xl mx-auto bg-white shadow-xl rounded-2xl p-6 md:p-10">        
         <h1 class="text-3xl font-bold text-gray-800 mb-2">
-            Colisões Registadas
+            Registo de Colisões
         </h1>
         <p v-if="channelName" class="text-xl text-indigo-600 font-medium mb-6">
-            Fonte: {{ channelName }}
         </p>
         <p v-else class="text-gray-500 mb-6">
             A carregar informações...
@@ -40,17 +39,17 @@
             <p class="font-bold">Erro ao carregar os dados:</p>
             <p>{{ error }}</p>
             <p class="text-sm mt-2 font-semibold">
-                A API não conseguiu ligar à base de dados. Verifique as credenciais no Vercel.
+                A API não conseguiu ligar à base de dados.
             </p>
         </div>    
-        <!-- Apresenta tabela se houverem entradas na tabela -->
+        <!-- Apresenta tabela se houverem entradas -->
         <div v-else-if="entries.length > 0">
             <div class="overflow-x-auto shadow-lg rounded-lg mb-6">
                 <table class="min-w-full divide-y divide-gray-200">
                     <thead class="bg-indigo-600 text-white sticky top-0">
                         <tr>
                             <th scope="col" class="px-4 py-3 text-left text-sm font-semibold uppercase tracking-wider">
-                                Data/Hora da Colisão
+                                Data e Hora da Colisão
                             </th>
                         </tr>
                     </thead>
@@ -67,28 +66,22 @@
                     </tbody>
                 </table>
                 <div class="p-4 text-sm text-gray-500 bg-white border-t border-gray-200">
-                    A mostrar os últimos {{ entries.length }} registos de colisão.
+                    A mostrar os {{ entries.length }} registos de colisões.
                 </div>
             </div>
-
             <!-- Controlo do Buzzer -->
-            <div class="border border-red-200 bg-red-50 p-4 rounded-lg flex flex-col sm:flex-row items-center justify-between">
-                <p class="text-red-700 font-medium mb-4 sm:mb-0">
-                    Enviar o comando de desligar para o Pico W (via Vercel).
-                </p>
+            <div class=" items-center justify-between">
                 <button 
                     @click="desligaBuzzer"
                     :disabled="buzzerLigado"
-                    class="w-full sm:w-auto px-6 py-2 bg-red-600 text-white font-semibold rounded-full shadow-lg hover:bg-red-700 transition duration-300 disabled:opacity-50 disabled:cursor-not-allowed"
-                >
+                    class="w-full sm:w-auto px-6 py-2 bg-red-600 text-white font-semibold rounded-full shadow-lg hover:bg-red-700 transition duration-300 disabled:opacity-50 disabled:cursor-not-allowed">
                     <span v-if="buzzerLigado">A enviar comando...</span>
                     <span v-else>Desligar Buzzer Remotamente</span>
                 </button>
             </div>
             <!-- Mensagem de estado do buzzer -->
             <div v-if="buzzerMensagemEstado" 
-                :class="['p-3 mt-4 rounded-lg', buzzerMensagemEstado.includes('Erro') ? 'bg-red-100 text-red-800' : 'bg-green-100 text-green-800']"
-            >
+                :class="['p-3 mt-4 rounded-lg', buzzerMensagemEstado.includes('Erro') ? 'bg-red-100 text-red-800' : 'bg-green-100 text-green-800']">
                 {{ buzzerMensagemEstado }}
             </div>
         </div>
@@ -120,7 +113,6 @@
             const desligaBuzzer = async() => {
                 buzzerLigado.value = true;
                 buzzerMensagemEstado.value = null;
-
                 try {
                     const resposta = await fetch(CONTROL_OFF_URL, {
                         method: 'POST'
@@ -128,21 +120,20 @@
                     
                     if (!resposta.ok) {
                         const errorData = await resposta.json();
-                        throw new Error (`Falha: Código ${resposta.status}. Detalhe: ${errorData.error || 'Erro desconhecido.'}`);
+                        throw new Error (`Falha: Código ${resposta.status}. Detalhe: ${errorData.error}`);
                     }
-                    
                     const data = await resposta.json();
-                    buzzerMensagemEstado.value = `Sinal de desligar enviado com sucesso! O Buzzer será desligado no próximo ciclo do Pico W.`;
+                    buzzerMensagemEstado.value = `Sinal de desligar alarme enviado com sucesso!`;
                     
                 } catch (e) {
-                    console.error("Erro ao enviar dados de controlo: ", e);
+                    console.error("Erro ao enviar sinal para desligar alarme: ", e);
                     buzzerMensagemEstado.value = `Erro ao enviar comando para a API: ${e.message}.`;
                 } finally {
                     buzzerLigado.value = false;
                 }
             };
             const fetchData = async () => {
-                if (entries.value.length === 0) {
+                if (entries.value.length == 0) {
                     loading.value = true;
                 }
                 error.value = null;
@@ -151,11 +142,9 @@
 
                     if (!response.ok) {
                         const errorData = await response.json(); 
-                        throw new Error(`Falha: Código ${response.status}. Detalhe: ${errorData.error || 'Erro desconhecido. Verifique o log do Vercel.'}`);
+                        throw new Error(`Falha: Código ${response.status}. Detalhes: ${errorData.error}`);
                     }
-                    
                     const data = await response.json();
-                    
                     if (data && data.registos) { 
                         entries.value = data.registos; 
                         return;
@@ -172,11 +161,10 @@
             };
             //formatar os dados da base de dados para timestamp
             const formatTimestamp = (timestamp) => {
-                if (!timestamp) return '-';
-                
+                if (!timestamp) 
+                    return '-';
                 try {
                     const date = new Date(timestamp);
-                    
                     const options = { 
                         year: 'numeric', 
                         month: 'short', 
@@ -193,18 +181,14 @@
                     return timestamp; 
                 }
             };
-
             onMounted(() => {
                 const { onUnmounted } = Vue; 
-                
                 fetchData();
                 const pollingInterval = setInterval(fetchData, 10000); 
-                
                 onUnmounted(() => {
                     clearInterval(pollingInterval);
                 });
             });
-
             return {
                 loading,
                 error,
@@ -219,6 +203,5 @@
         }
     }).mount('#app');
 </script>
-
 </body>
 </html>
