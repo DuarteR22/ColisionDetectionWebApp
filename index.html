@@ -184,7 +184,7 @@
             onMounted(() => {
                 const { onUnmounted } = Vue; 
                 fetchData();
-                const pollingInterval = setInterval(fetchData, 10000); 
+                const pollingInterval = setInterval(fetchData, 5000); 
                 onUnmounted(() => {
                     clearInterval(pollingInterval);
                 });
